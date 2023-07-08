@@ -2,10 +2,8 @@
 
 __global__ void coalesing_gemm_kernel(const float *A, const float *B, float *C, unsigned M, unsigned N, unsigned K, unsigned BLOCKSIZE)
 {
-  // const int x = blockIdx.x * BLOCKSIZE + (threadIdx.x / BLOCKSIZE);
-  // const int y = blockIdx.y * BLOCKSIZE + (threadIdx.x % BLOCKSIZE);
-  const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-  const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+  const int x = blockIdx.x * BLOCKSIZE + (threadIdx.x / BLOCKSIZE);
+  const int y = blockIdx.y * BLOCKSIZE + (threadIdx.x % BLOCKSIZE);
 
   if (x < M && y < N) {
     float result = 0.0;

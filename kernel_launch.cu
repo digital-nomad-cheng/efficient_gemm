@@ -13,7 +13,7 @@ void mm_gpu_navie(float* A, float* B, float* C, unsigned int M, unsigned int N, 
 
 void mm_gpu_coalesing(float* A, float* B, float* C, unsigned int M, unsigned int N, unsigned int K) {
     dim3 block_dim{32 * 32, 1, 1};
-    dim3 grid_dim{CEIL_DIV(M, 32), CEIL_DIV(N, 32)};
-    coalesing_gemm_kernel<<<grid_dim, block_dim>>>(A, B, C, M, N, K, 1024);
+    dim3 grid_dim{CEIL_DIV(M, 32), CEIL_DIV(N, 32), 1};
+    coalesing_gemm_kernel<<<grid_dim, block_dim>>>(A, B, C, M, N, K, 32);
 }
 
