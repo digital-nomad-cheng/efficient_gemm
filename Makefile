@@ -1,7 +1,7 @@
 
 NVCC        = nvcc
 NVCC_FLAGS  = -O3
-OBJ         = main.o kernel.o 00_navie_gemm.o 01_coalesing_gemm.o
+OBJ         = main.o kernel_launch.o 00_navie_gemm.o 01_coalesing_gemm.o
 EXE         = mm
 
 

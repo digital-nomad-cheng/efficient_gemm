@@ -1,6 +1,5 @@
-
-#include "common.h"
 #include "timer.h"
+#include "common.h"
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -17,6 +16,19 @@ void check(T err, const char* const func, const char* const file,
         // We don't exit when we encounter CUDA errors in this example.
         std::exit(EXIT_FAILURE);
     }
+}
+
+void verify_result(const float *C_cpu, const float *C_gpu, const uint M, const uint N) {
+    for (unsigned int row = 0; row < M; ++row) {
+            for (unsigned int col = 0; col < N; ++col) {
+                float diff = (C_cpu[row*N + col] - C_gpu[row*N + col])/C_cpu[row*N + col];
+                const float tolerance = 0.00001;
+                if(diff > tolerance || diff < -tolerance || isnan(diff)) {
+                    printf("Mismatch at row %u, col %u (CPU result = %e, GPU result = %e)\n", row, col, C_cpu[row*N + col], C_gpu[row*N + col]);
+                    exit(0);
+                }
+            }
+        }
 }
 
 void mm_cpu(float* A, float* B, float* C, unsigned int M, unsigned int N, unsigned int K) {
@@ -96,18 +108,41 @@ int main(int argc, char**argv) {
 
     // Compute on GPU
     startTime(&timer);
-    mm_gpu(A_d, B_d, C_d, M, N, K);
+    mm_gpu_navie(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     cudaDeviceSynchronize();
     stopTime(&timer);
-    printElapsedTime(timer, "Kernel time", GREEN);
-
+    printElapsedTime(timer, "Navie kernel time", GREEN);
+    
     // Copy data from GPU
     startTime(&timer);
     cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     stopTime(&timer);
     printElapsedTime(timer, "Copy from GPU time");
+
+    if (verify) {
+        verify_result(C_cpu, C_gpu, M, N);
+    }
+
+    // Compute on GPU
+    startTime(&timer);
+    mm_gpu_coalesing(A_d, B_d, C_d, M, N, K);
+    CHECK_CUDA_ERROR(cudaPeekAtLastError());
+    cudaDeviceSynchronize();
+    stopTime(&timer);
+    printElapsedTime(timer, "Coalesing kernel time", GREEN);
+    
+    // Copy data from GPU
+    startTime(&timer);
+    cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    stopTime(&timer);
+    printElapsedTime(timer, "Copy from GPU time");
+
+    if (verify) {
+        verify_result(C_cpu, C_gpu, M, N);
+    }
 
     // Free GPU memory
     startTime(&timer);
@@ -117,20 +152,6 @@ int main(int argc, char**argv) {
     cudaDeviceSynchronize();
     stopTime(&timer);
     printElapsedTime(timer, "Deallocation time");
-
-    // Verify result
-    if(verify) {
-        for (unsigned int row = 0; row < M; ++row) {
-            for (unsigned int col = 0; col < N; ++col) {
-                float diff = (C_cpu[row*N + col] - C_gpu[row*N + col])/C_cpu[row*N + col];
-                const float tolerance = 0.00001;
-                if(diff > tolerance || diff < -tolerance || isnan(diff)) {
-                    printf("Mismatch at row %u, col %u (CPU result = %e, GPU result = %e)\n", row, col, C_cpu[row*N + col], C_gpu[row*N + col]);
-                    exit(0);
-                }
-            }
-        }
-    }
 
     // Free memory
     free(A);
