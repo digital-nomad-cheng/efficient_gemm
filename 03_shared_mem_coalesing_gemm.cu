@@ -20,11 +20,11 @@ __global__ void shared_mem_coalesing_gemm_kernel(const float *A, const float *B,
   const uint col = cCol * BLOCKSIZE + threadCol;
 
   float result = 0.0f;
-  for (int bkIdx = 0; bkIdx < (K - 1) / BLOCKSIZE + 1; bkIdx++) {
+  for (unsigned int bkIdx = 0; bkIdx < (K - 1) / BLOCKSIZE + 1; bkIdx++) {
     // Have each thread load one of the elements in A & B
     // Make the threadCol (=threadIdx.x) the consecutive index
     // to allow global memory access coalescing
-    if (row < M && (BLOCKSIZE * bkIdx + threadCol) < K) { 
+    if (row < M && (bkIdx * BLOCKSIZE + threadCol) < K) { 
       As[threadRow][threadCol] = A[row * K + (bkIdx * BLOCKSIZE + threadCol)];
     } else {
       As[threadRow][threadCol] = 0.0f;
@@ -39,18 +39,18 @@ __global__ void shared_mem_coalesing_gemm_kernel(const float *A, const float *B,
     __syncthreads();
 
     // execute the dotproduct on the currently cached block
-    if (row < M && col < N) {
-      for (int dotIdx = 0; dotIdx < BLOCKSIZE; ++dotIdx) {
-        result += As[threadRow][dotIdx] *
-              Bs[dotIdx][threadCol];
-      }
+    
+    for (unsigned int k = 0; k < BLOCKSIZE; k++) {
+    result += As[threadRow][k] *
+            Bs[k][threadCol];
     }
+    
     __syncthreads();
 
   }
 
   if (row < M && col < N) {
-    C[row * M + col] = result;
+    C[row * N + col] = result;
   }
 
 } 
