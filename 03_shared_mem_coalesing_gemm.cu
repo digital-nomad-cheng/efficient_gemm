@@ -39,14 +39,11 @@ __global__ void shared_mem_coalesing_gemm_kernel(const float *A, const float *B,
     __syncthreads();
 
     // execute the dotproduct on the currently cached block
-    
     for (unsigned int k = 0; k < BLOCKSIZE; k++) {
-    result += As[threadRow][k] *
-            Bs[k][threadCol];
+      result += As[threadRow][k] * 
+        Bs[k][threadCol];
     }
-    
     __syncthreads();
-
   }
 
   if (row < M && col < N) {
