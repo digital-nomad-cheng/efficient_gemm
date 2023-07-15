@@ -25,11 +25,9 @@ __global__ void shared_mem_tiling_gemm_kernel(const float *A, const float *B, fl
       Bs[threadIdx.y][threadIdx.x] = 0.0f;
     }
     __syncthreads();
-
-    if (row < M && col < N) {
-      for (unsigned int k = 0; k < BLOCKSIZE; k++) {
-          result += As[threadIdx.y][k] * Bs[k][threadIdx.x];
-      }
+    
+    for (unsigned int k = 0; k < BLOCKSIZE; k++) {
+        result += As[threadIdx.y][k] * Bs[k][threadIdx.x];
     }
     __syncthreads();
   }
