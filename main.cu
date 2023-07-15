@@ -14,7 +14,8 @@ void check(T err, const char* const func, const char* const file,
                   << std::endl;
         std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
         // We don't exit when we encounter CUDA errors in this example.
-        std::exit(EXIT_FAILURE);
+        // std::exit(EXIT_FAILURE);
+        std::exit(err);
     }
 }
 
@@ -57,7 +58,7 @@ void mm_cpu(float* A, float* B, float* C, unsigned int M, unsigned int N, unsign
 
 int main(int argc, char**argv) {
 
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
 
     // Allocate memory and initialize data
     Timer timer;
@@ -91,18 +92,18 @@ int main(int argc, char**argv) {
     // Allocate GPU memory
     startTime(&timer);
     float *A_d, *B_d, *C_d;
-    cudaMalloc((void**) &A_d, M*K*sizeof(float));
-    cudaMalloc((void**) &B_d, K*N*sizeof(float));
-    cudaMalloc((void**) &C_d, M*N*sizeof(float));
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaMalloc((void**) &A_d, M*K*sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMalloc((void**) &B_d, K*N*sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMalloc((void**) &C_d, M*N*sizeof(float)));
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
     printElapsedTime(timer, "Allocation time");
     
     // Copy data to GPU
     startTime(&timer);
-    cudaMemcpy(A_d, A, M*K*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(B_d, B, K*N*sizeof(float), cudaMemcpyHostToDevice);
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaMemcpy(A_d, A, M*K*sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpy(B_d, B, K*N*sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
     printElapsedTime(timer, "Copy to GPU time");
     
@@ -110,14 +111,14 @@ int main(int argc, char**argv) {
     startTime(&timer);
     mm_gpu_navie(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
     printElapsedTime(timer, "Navie kernel time", GREEN);
 
     // Copy data from GPU
     startTime(&timer);
-    cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
     printElapsedTime(timer, "Copy from GPU time");
 
@@ -126,13 +127,33 @@ int main(int argc, char**argv) {
     }
 
     // Compute on GPU
-    cudaMemset(C_d, 0.0, M*N*sizeof(float));
+    CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
     startTime(&timer);
     mm_gpu_coalesing(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
-    cudaDeviceSynchronize();
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
     printElapsedTime(timer, "Coalesing kernel time", GREEN);
+    
+    // Copy data from GPU
+    startTime(&timer);
+    CHECK_CUDA_ERROR(cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+    stopTime(&timer);
+    printElapsedTime(timer, "Copy from GPU time");
+
+    if (verify) {
+        verify_result(C_cpu, C_gpu, M, N);
+    }
+
+    // Compute on GPU
+    CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
+    startTime(&timer);
+    mm_gpu_tiling(A_d, B_d, C_d, M, N, K);
+    CHECK_CUDA_ERROR(cudaPeekAtLastError());
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+    stopTime(&timer);
+    printElapsedTime(timer, "Tiling kernel time", GREEN);
     
     // Copy data from GPU
     startTime(&timer);
