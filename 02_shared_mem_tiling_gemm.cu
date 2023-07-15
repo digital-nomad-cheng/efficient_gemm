@@ -3,6 +3,7 @@
 #define BLOCKSIZE 16
 __global__ void shared_mem_tiling_gemm_kernel(const float *A, const float *B, float *C, unsigned M, unsigned N, unsigned K)
 {
+
   // shared memory for loading blockks of A and B
   __shared__ float As[BLOCKSIZE][BLOCKSIZE];
   __shared__ float Bs[BLOCKSIZE][BLOCKSIZE];

@@ -17,9 +17,16 @@ void mm_gpu_coalesing(float* A, float* B, float* C, unsigned int M, unsigned int
     coalesing_gemm_kernel<<<grid_dim, block_dim>>>(A, B, C, M, N, K, 32);
 }
 
-void mm_gpu_tiling(float *A, float *B, float *C, unsigned int M, unsigned int N, unsigned int K) {
-    // dim3 block_dim{32*32, 1, 1};
-    dim3 block_dim{16, 16, 1};
-    dim3 grid_dim{CEIL_DIV(N, 16), CEIL_DIV(M, 16), 1};
+void mm_gpu_shared_tiling(float *A, float *B, float *C, unsigned int M, unsigned int N, unsigned int K) {
+    const int block_size = 16;
+    dim3 block_dim{block_size, block_size, 1};
+    dim3 grid_dim{CEIL_DIV(N, block_size), CEIL_DIV(M, block_size), 1};
     shared_mem_tiling_gemm_kernel<<<grid_dim, block_dim>>>(A, B, C, M, N, K);
+}
+
+void mm_gpu_shared_coalesing(float *A, float *B, float *C, unsigned int M, unsigned int N, unsigned int K) {
+    const int block_size = 16;
+    dim3 block_dim{block_size * block_size, 1, 1};
+    dim3 grid_dim{CEIL_DIV(N, block_size), CEIL_DIV(M, block_size), 1};
+    shared_mem_coalesing_gemm_kernel<<<grid_dim, block_dim>>>(A, B, C, M, N, K);
 }

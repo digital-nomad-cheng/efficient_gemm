@@ -149,11 +149,11 @@ int main(int argc, char**argv) {
     // Compute on GPU
     CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
     startTime(&timer);
-    mm_gpu_tiling(A_d, B_d, C_d, M, N, K);
+    mm_gpu_shared_tiling(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     stopTime(&timer);
-    printElapsedTime(timer, "Tiling kernel time", GREEN);
+    printElapsedTime(timer, "Shared tiling kernel time", GREEN);
     
     // Copy data from GPU
     startTime(&timer);
@@ -165,6 +165,27 @@ int main(int argc, char**argv) {
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
     }
+
+    // Compute on GPU
+    CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
+    startTime(&timer);
+    mm_gpu_shared_coalesing(A_d, B_d, C_d, M, N, K);
+    CHECK_CUDA_ERROR(cudaPeekAtLastError());
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+    stopTime(&timer);
+    printElapsedTime(timer, "Shared coalesing kernel time", GREEN);
+    
+    // Copy data from GPU
+    startTime(&timer);
+    cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    stopTime(&timer);
+    printElapsedTime(timer, "Copy from GPU time");
+
+    if (verify) {
+        verify_result(C_cpu, C_gpu, M, N);
+    }
+
 
     // Free GPU memory
     startTime(&timer);
