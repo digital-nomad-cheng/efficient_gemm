@@ -94,9 +94,9 @@ int main(int argc, char**argv) {
 
     // Allocate memory and initialize data
     Timer timer;
-    unsigned int M = (argc > 1)?(atoi(argv[1])):2000;
-    unsigned int N = (argc > 2)?(atoi(argv[2])):2200;
-    unsigned int K = (argc > 3)?(atoi(argv[3])):2100;
+    unsigned int M = (argc > 1)?(atoi(argv[1])):1024;
+    unsigned int N = (argc > 2)?(atoi(argv[2])):1024;
+    unsigned int K = (argc > 3)?(atoi(argv[3])):1024;
     unsigned int verify = (argc > 4)?(atoi(argv[4])):1;
     float* A = (float*) malloc(M*K*sizeof(float));
     float* B = (float*) malloc(K*N*sizeof(float));
@@ -217,7 +217,26 @@ int main(int argc, char**argv) {
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
     }
+    
+    // Compute on GPU
+    CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
+    startTime(&timer);
+    mm_gpu_thread_tiling(A_d, B_d, C_d, M, N, K);
+    CHECK_CUDA_ERROR(cudaPeekAtLastError());
+    CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+    stopTime(&timer);
+    printElapsedTime(timer, "Thread tiling kernel time", GREEN);
+    
+    // Copy data from GPU
+    startTime(&timer);
+    cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    stopTime(&timer);
+    printElapsedTime(timer, "Copy from GPU time");
 
+    if (verify) {
+        verify_result(C_cpu, C_gpu, M, N);
+    }
 
     // Free GPU memory
     startTime(&timer);
