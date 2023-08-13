@@ -1,66 +1,55 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
-#define BM 64
-#define BN 64
-#define BK 8
-#define TM 8
+
+#define BM 128 // acutal number of threads we have for each block
+              // we want these to be large as possible to have more warps
+              // which means more scheduling opportunity
+#define BN 32 // register coarsensing in N dimension
+              // limited by the number of available registers
+#define BK 4  // use BK * BN = BM to maintain load balance 
+// register tiling size in M dimension, each M is reused 16 times within one thread
+
 __global__ void shared_mem_thread_tiling_gemm_kernel(const float *A, const float *B, float *C, unsigned M, unsigned N, unsigned K)
 {
   const uint cRow = blockIdx.y;
   const uint cCol = blockIdx.x;
 
-  // each warp will calculate 32*TM elements, with 32 being the columnar dim.
-  const int threadCol = threadIdx.x % BN;
-  const int threadRow = threadIdx.x / BN;
+  const uint tidx = threadIdx.x;
 
   // allocate space for the current blocktile in SMEM
-  __shared__ float As[BM * BK];
-  __shared__ float Bs[BK * BN];
-
-  // Move blocktile to beginning of A's row and B's column
-  A += cRow * BM * K;
-  B += cCol * BN;
-  C += cRow * BM * N + cCol * BN;
-
-  // todo: adjust this to each thread to load multiple entries and
-  // better exploit the cache sizes
-  // assert(BM * BK == blockDim.x);
-  // assert(BN * BK == blockDim.x);
-  const uint innerColA = threadIdx.x % BK; // warp-level GMEM coalescing
-  const uint innerRowA = threadIdx.x / BK;
-  const uint innerColB = threadIdx.x % BN; // warp-level GMEM coalescing
-  const uint innerRowB = threadIdx.x / BN;
+  __shared__ float Bs[BK][BN];
 
   // allocate thread-local cache for results in registerfile
-  float threadResults[TM] = {0.0};
-
+  float threadResults[BN] = {0.0};
+  float regA[BK] = {0.0};
+  
+  // thread index for incooperating loading B into smem
+  uint tidxRowB = tidx / BN; // 0-3 here
+  uint tidxColB = tidx % BN; // 0-15 here
   // outer loop over block tiles
   for (uint bkIdx = 0; bkIdx < K; bkIdx += BK) {
-    // populate the SMEM caches
-    As[innerRowA * BK + innerColA] = A[innerRowA * K + innerColA];
-    Bs[innerRowB * BN + innerColB] = B[innerRowB * N + innerColB];
+    // each thread load BK A elements into registers
+    for (uint idx = 0; idx < BK; idx++) {
+      regA[idx] = A[(cRow * BM + tidx) * K + bkIdx + idx];
+    }
+    // each thread load one B element into shared memory
+    Bs[tidxRowB][tidxColB] = B[(bkIdx + tidxRowB) * N + cCol * BN + tidxColB]; 
     __syncthreads();
-
-    // advance blocktile
-    A += BK;
-    B += BK * N;
-
-    // calculate per-thread results
-    for (uint dotIdx = 0; dotIdx < BK; ++dotIdx) {
-      // we make the dotproduct loop the outside loop, which facilitates
-      // reuse of the Bs entry, which we can cache in a tmp var.
-      float tmpB = Bs[dotIdx * BN + threadCol];
-      for (uint resIdx = 0; resIdx < TM; ++resIdx) {
-        threadResults[resIdx] +=
-            As[(threadRow * TM + resIdx) * BK + dotIdx] * tmpB;
+     
+    // each perform BK steps inner product
+    for (uint kIdx = 0; kIdx < BK; ++kIdx) {
+      // each thread need to perform BN calculations/thread coarsensing
+      // for each step, A is stored in register file
+      // B is stored in shared memory
+      for (uint nIdx = 0; nIdx < BN; ++nIdx) {
+        threadResults[nIdx] += regA[kIdx] * Bs[kIdx][nIdx];
       }
     }
     __syncthreads();
   }
 
-  // write out the results
-  for (uint resIdx = 0; resIdx < TM; ++resIdx) {
-    C[(threadRow * TM + resIdx) * N + threadCol] =
-      threadResults[resIdx];
+  // write out the results, each thread need to write back BN values in register
+  for (uint nIdx = 0; nIdx < BN; ++nIdx) {
+    C[(cRow * BM + tidx) * N + cCol * BN + nIdx] = threadResults[nIdx];
   }
 } 
