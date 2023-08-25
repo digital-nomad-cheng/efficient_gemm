@@ -1,8 +1,54 @@
-#include "timer.h"
 #include "common.h"
 #include "util.hpp"
+#include "timer.hpp"
 #include <cuda_runtime.h>
 #include <iostream>
+
+#define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
+template <typename T>
+void check(T err, const char* const func, const char* const file,
+           const int line)
+{
+    if (err != cudaSuccess)
+    {
+        std::cerr << "CUDA Runtime Error at: " << file << ":" << line
+                  << std::endl;
+        std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
+        // We don't exit when we encounter CUDA errors in this example.
+        // std::exit(EXIT_FAILURE);
+        std::exit(err);
+    }
+}
+
+void get_cuda_info() {
+  int deviceId;
+
+  cudaGetDevice(&deviceId);
+
+  cudaDeviceProp props{};
+  cudaGetDeviceProperties(&props, deviceId);
+
+  printf("Device ID: %d\n\
+    Name: %s\n\
+    Compute Capability: %d.%d\n\
+    memoryBusWidth: %d\n\
+    maxThreadsPerBlock: %d\n\
+    maxThreadsPerMultiProcessor: %d\n\
+    maxRegsPerBlock: %d\n\
+    maxRegsPerMultiProcessor: %d\n\
+    totalGlobalMem: %zuMB\n\
+    sharedMemPerBlock: %zuKB\n\
+    sharedMemPerMultiprocessor: %zuKB\n\
+    totalConstMem: %zuKB\n\
+    multiProcessorCount: %d\n\
+    Warp Size: %d\n",
+         deviceId, props.name, props.major, props.minor, props.memoryBusWidth,
+         props.maxThreadsPerBlock, props.maxThreadsPerMultiProcessor,
+         props.regsPerBlock, props.regsPerMultiprocessor,
+         props.totalGlobalMem / 1024 / 1024, props.sharedMemPerBlock / 1024,
+         props.sharedMemPerMultiprocessor / 1024, props.totalConstMem / 1024,
+         props.multiProcessorCount, props.warpSize);
+}
 
 void verify_result(const float *C_cpu, const float *C_gpu, const uint M, const uint N) {
     for (unsigned int row = 0; row < M; ++row) {
@@ -72,44 +118,53 @@ int main(int argc, char**argv) {
 
     // Compute on CPU
     if(verify) {
-        startTime(&timer);
+        // timer.start_gpu();
+        timer.start_cpu();
         mm_cpu(A, B, C_cpu, M, N, K);
-        stopTime(&timer);
-        printElapsedTime(timer, "CPU time", CYAN);
+        // timer.stop_gpu();
+        timer.stop_cpu();
+        // printElapsedTime(timer, "CPU time", CYAN);
+        timer.duration_cpu<Timer::ms>("CPU time");
     }
 
     // Allocate GPU memory
-    startTime(&timer);
+    // timer.start_gpu();
+    timer.start_gpu();
     float *A_d, *B_d, *C_d;
     CHECK_CUDA_ERROR(cudaMalloc((void**) &A_d, M*K*sizeof(float)));
     CHECK_CUDA_ERROR(cudaMalloc((void**) &B_d, K*N*sizeof(float)));
     CHECK_CUDA_ERROR(cudaMalloc((void**) &C_d, M*N*sizeof(float)));
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Allocation time");
-    
+    // timer.stop_gpu();
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Allocation time");
+    timer.duration_gpu("Allocation time");
+
     // Copy data to GPU
-    startTime(&timer);
+    timer.start_gpu();
     CHECK_CUDA_ERROR(cudaMemcpy(A_d, A, M*K*sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA_ERROR(cudaMemcpy(B_d, B, K*N*sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy to GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy to GPU time");
+    timer.duration_gpu("Copy to GPU time");
     
     // Compute on GPU
-    startTime(&timer);
+    timer.start_gpu();
     mm_gpu_navie(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Navie kernel time", GREEN);
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Navie kernel time", GREEN);
+    timer.duration_gpu("Navie kernel time");
 
     // Copy data from GPU
-    startTime(&timer);
+    timer.start_gpu();
     CHECK_CUDA_ERROR(cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy from GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy from GPU time");
+    timer.duration_gpu("Copy from GPU time");
 
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
@@ -117,19 +172,21 @@ int main(int argc, char**argv) {
 
     // Compute on GPU
     CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
-    startTime(&timer);
+    timer.start_gpu();
     mm_gpu_coalesing(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Coalesing kernel time", GREEN);
-    
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Coalesing kernel time", GREEN);
+    timer.duration_gpu("Coalesing kernel time");
+
     // Copy data from GPU
-    startTime(&timer);
+    timer.start_gpu();
     CHECK_CUDA_ERROR(cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy from GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy from GPU time");
+    timer.duration_gpu("Copy from GPU time");
 
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
@@ -137,19 +194,21 @@ int main(int argc, char**argv) {
 
     // Compute on GPU
     CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
-    startTime(&timer);
+    timer.start_gpu();
     mm_gpu_shared_tiling(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Shared tiling kernel time", GREEN);
-    
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Shared tiling kernel time", GREEN);
+    timer.duration_gpu("Shared tiling kernl time");
+
     // Copy data from GPU
-    startTime(&timer);
+    timer.start_gpu();
     cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy from GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy from GPU time");
+    timer.duration_gpu("Copy from GPU time");
 
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
@@ -157,19 +216,21 @@ int main(int argc, char**argv) {
 
     // Compute on GPU
     CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
-    startTime(&timer);
+    timer.start_gpu();
     mm_gpu_shared_coalesing(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Shared coalesing kernel time", GREEN);
-    
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Shared coalesing kernel time", GREEN);
+    timer.duration_gpu("Shared coalesing kernel time");
+
     // Copy data from GPU
-    startTime(&timer);
+    timer.start_gpu();
     cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy from GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy from GPU time");
+    timer.duration_gpu("Copy from GPU time");
 
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
@@ -177,33 +238,35 @@ int main(int argc, char**argv) {
     
     // Compute on GPU
     CHECK_CUDA_ERROR(cudaMemset(C_d, 0.0, M*N*sizeof(float)));
-    startTime(&timer);
+    timer.start_gpu();
     mm_gpu_thread_tiling(A_d, B_d, C_d, M, N, K);
     CHECK_CUDA_ERROR(cudaPeekAtLastError());
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-    stopTime(&timer);
-    printElapsedTime(timer, "Thread tiling kernel time", GREEN);
-    
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Thread tiling kernel time", GREEN);
+    timer.duration_gpu("Thread tiling kernel time");
+
     // Copy data from GPU
-    startTime(&timer);
+    timer.start_gpu();
     cudaMemcpy(C_gpu, C_d, M*N*sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
-    stopTime(&timer);
-    printElapsedTime(timer, "Copy from GPU time");
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Copy from GPU time");
+    timer.duration_gpu("Copy from GPU time");
 
     if (verify) {
         verify_result(C_cpu, C_gpu, M, N);
     }
 
     // Free GPU memory
-    startTime(&timer);
+    timer.start_gpu();
     cudaFree(A_d);
     cudaFree(B_d);
     cudaFree(C_d);
     cudaDeviceSynchronize();
-    stopTime(&timer);
-    printElapsedTime(timer, "Deallocation time");
-
+    timer.stop_gpu();
+    // printElapsedTime(timer, "Deallocation time");
+    timer.duration_gpu("Deallocation time on GPU");
     // Free memory
     free(A);
     free(B);

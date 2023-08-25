@@ -1,5 +1,4 @@
 #include "common.h"
-#include "timer.h"
 
 #include <iostream>
 

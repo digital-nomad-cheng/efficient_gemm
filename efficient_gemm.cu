@@ -1,6 +1,5 @@
 
 #include "common.h"
-#include "timer.h"
 #include <iostream>
 
 #define TILE_SIZE 32

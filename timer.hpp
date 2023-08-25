@@ -6,7 +6,7 @@
 #include <string>
 #include <iostream>
 #include <cuda_runtime.h>
-#include "util.h"
+#include "util.hpp"
 
 class Timer {
 public:
@@ -20,10 +20,10 @@ public:
   ~Timer();
 
 public:
-  start_cpu();
-  stop_cpu();
-  start_gpu();
-  stop_gpu();
+  void start_cpu();
+  void stop_cpu();
+  void start_gpu();
+  void stop_gpu();
   
   template<typename span>
   void duration_cpu(std::string msg);
@@ -36,7 +36,7 @@ private:
   cudaEvent_t _gStart;
   cudaEvent_t _gStop;
   float _timeElapsed;
-}
+};
 
 template<typename span>
 void Timer::duration_cpu(std::string msg) {
@@ -46,5 +46,7 @@ void Timer::duration_cpu(std::string msg) {
   if (std::is_same<us, span>::value) { str = "us"; }
   if (std::is_same<ns, span>::value) { str = "ns"; }
   std::chrono::duration<double, span> time = _cStop - _cStart;
-  std::cout << msg << " uses: " << time.count << str << std::endl; 
+  std::cout << msg << " uses: " << time.count() << str << std::endl; 
 }
+
+#endif // __TIMER_HPP__

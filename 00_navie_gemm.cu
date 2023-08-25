@@ -1,5 +1,4 @@
 #include <cuda_runtime.h>
-#include "common.h"
 
 __global__ void navie_gemm_kernel(const float * A, const float * B, float * C, 
   unsigned M, unsigned N, unsigned K) {
